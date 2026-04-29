@@ -1,17 +1,18 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import torch
 import torch.nn as nn
+import os
 
 from sqlalchemy import create_engine, Column, Integer, String
 from sqlalchemy.orm import sessionmaker, declarative_base
 
 
 # -----------------------
-# DATABASE SETUP
+# DATABASE
 # -----------------------
 DATABASE_URL = "sqlite:///./data/items.db"
 
@@ -69,16 +70,19 @@ class SimpleClassifier(nn.Module):
         return self.fc2(x)
 
 
-# Load model ONCE at startup
+# 🔥 FIXED MODEL PATH (works in Docker)
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MODEL_PATH = os.path.join(BASE_DIR, "model.pth")
+
 model = SimpleClassifier()
-model.load_state_dict(torch.load("model.pth"))
+model.load_state_dict(torch.load(MODEL_PATH, map_location=torch.device("cpu")))
 model.eval()
 
 labels = ["setosa", "versicolor", "virginica"]
 
 
 # -----------------------
-# FASTAPI APP
+# FASTAPI
 # -----------------------
 app = FastAPI()
 
@@ -94,7 +98,6 @@ app.add_middleware(
 # -----------------------
 # CRUD ROUTES
 # -----------------------
-
 @app.get("/items", response_model=list[ItemRead])
 def get_items():
     db = SessionLocal()
@@ -115,7 +118,7 @@ def get_item(item_id: int):
     return item
 
 
-@app.post("/items", response_model=ItemRead, status_code=201)
+@app.post("/items", response_model=ItemRead, status_code=status.HTTP_201_CREATED)
 def create_item(item: ItemCreate):
     db = SessionLocal()
 
@@ -164,7 +167,7 @@ def delete_item(item_id: int):
 
 
 # -----------------------
-# PREDICTION ENDPOINT
+# PREDICT ENDPOINT
 # -----------------------
 @app.post("/predict")
 def predict(req: PredictionRequest):
@@ -180,7 +183,24 @@ def predict(req: PredictionRequest):
         "prediction": labels[pred],
         "confidence": round(confidence, 3)
     }
+from pydantic import BaseModel
+import torch
 
+class PredictionRequest(BaseModel):
+    features: list[float]
+
+@app.post("/predict")
+def predict(req: PredictionRequest):
+    x = torch.tensor([req.features], dtype=torch.float32)
+
+    with torch.no_grad():
+        outputs = model(x)
+        probs = torch.softmax(outputs, dim=1)
+        pred = torch.argmax(probs, dim=1).item()
+
+    return {
+        "prediction": int(pred)
+    }
 
 # -----------------------
 # SERVE FRONTEND
