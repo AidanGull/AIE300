@@ -1,11 +1,17 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+
+import torch
+import torch.nn as nn
+
 from sqlalchemy import create_engine, Column, Integer, String
 from sqlalchemy.orm import sessionmaker, declarative_base
-from fastapi.staticfiles import StaticFiles
+
+
 # -----------------------
-# Database setup (SQLite)
+# DATABASE SETUP
 # -----------------------
 DATABASE_URL = "sqlite:///./data/items.db"
 
@@ -16,10 +22,7 @@ SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
 
-# -----------------------
-# Database model
-# -----------------------
-class Item(Base):
+class ItemDB(Base):
     __tablename__ = "items"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -27,12 +30,11 @@ class Item(Base):
     description = Column(String, nullable=True)
 
 
-# Create tables automatically
 Base.metadata.create_all(bind=engine)
 
 
 # -----------------------
-# Pydantic models
+# PYDANTIC MODELS
 # -----------------------
 class ItemCreate(BaseModel):
     name: str
@@ -48,12 +50,38 @@ class ItemRead(BaseModel):
         from_attributes = True
 
 
+class PredictionRequest(BaseModel):
+    features: list[float]
+
+
 # -----------------------
-# FastAPI app
+# PYTORCH MODEL
+# -----------------------
+class SimpleClassifier(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.fc1 = nn.Linear(4, 16)
+        self.relu = nn.ReLU()
+        self.fc2 = nn.Linear(16, 3)
+
+    def forward(self, x):
+        x = self.relu(self.fc1(x))
+        return self.fc2(x)
+
+
+# Load model ONCE at startup
+model = SimpleClassifier()
+model.load_state_dict(torch.load("model.pth"))
+model.eval()
+
+labels = ["setosa", "versicolor", "virginica"]
+
+
+# -----------------------
+# FASTAPI APP
 # -----------------------
 app = FastAPI()
 
-# Enable CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -64,23 +92,21 @@ app.add_middleware(
 
 
 # -----------------------
-# Routes
+# CRUD ROUTES
 # -----------------------
 
-# Get all items
 @app.get("/items", response_model=list[ItemRead])
 def get_items():
     db = SessionLocal()
-    items = db.query(Item).all()
+    items = db.query(ItemDB).all()
     db.close()
     return items
 
 
-# Get single item
 @app.get("/items/{item_id}", response_model=ItemRead)
 def get_item(item_id: int):
     db = SessionLocal()
-    item = db.query(Item).filter(Item.id == item_id).first()
+    item = db.query(ItemDB).filter(ItemDB.id == item_id).first()
     db.close()
 
     if not item:
@@ -89,12 +115,11 @@ def get_item(item_id: int):
     return item
 
 
-# Create item
 @app.post("/items", response_model=ItemRead, status_code=201)
 def create_item(item: ItemCreate):
     db = SessionLocal()
 
-    db_item = Item(name=item.name, description=item.description)
+    db_item = ItemDB(name=item.name, description=item.description)
     db.add(db_item)
     db.commit()
     db.refresh(db_item)
@@ -103,12 +128,11 @@ def create_item(item: ItemCreate):
     return db_item
 
 
-# Update item
 @app.put("/items/{item_id}", response_model=ItemRead)
 def update_item(item_id: int, updated: ItemCreate):
     db = SessionLocal()
 
-    item = db.query(Item).filter(Item.id == item_id).first()
+    item = db.query(ItemDB).filter(ItemDB.id == item_id).first()
     if not item:
         db.close()
         raise HTTPException(status_code=404, detail="Item not found")
@@ -123,12 +147,11 @@ def update_item(item_id: int, updated: ItemCreate):
     return item
 
 
-# Delete item
 @app.delete("/items/{item_id}")
 def delete_item(item_id: int):
     db = SessionLocal()
 
-    item = db.query(Item).filter(Item.id == item_id).first()
+    item = db.query(ItemDB).filter(ItemDB.id == item_id).first()
     if not item:
         db.close()
         raise HTTPException(status_code=404, detail="Item not found")
@@ -140,4 +163,26 @@ def delete_item(item_id: int):
     return {"message": "Item deleted"}
 
 
+# -----------------------
+# PREDICTION ENDPOINT
+# -----------------------
+@app.post("/predict")
+def predict(req: PredictionRequest):
+    x = torch.tensor([req.features], dtype=torch.float32)
+
+    with torch.no_grad():
+        outputs = model(x)
+        probs = torch.softmax(outputs, dim=1)
+        pred = torch.argmax(probs, dim=1).item()
+        confidence = probs[0][pred].item()
+
+    return {
+        "prediction": labels[pred],
+        "confidence": round(confidence, 3)
+    }
+
+
+# -----------------------
+# SERVE FRONTEND
+# -----------------------
 app.mount("/", StaticFiles(directory="static", html=True), name="static")

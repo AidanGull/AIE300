@@ -1,3 +1,6 @@
 fastapi
 uvicorn
 sqlalchemy
+torch --index-url https://download.pytorch.org/whl/cpu
+numpy
+scikit-learn

@@ -4,7 +4,7 @@ A simple REST API built with FastAPI that allows you to create, read, update, an
 
 ---
 
-## 🚀 Installation
+##  Installation
 
 1. Clone the repository:
 
@@ -95,8 +95,14 @@ Then open your browser:
 * Status: `200 OK` or `404 Not Found`
 
 ---
+# AIE300 Full Stack App
+
+## Run with Docker
+```bash
+docker-compose up --build
 
 ## 🧠 Notes
 
 * Data is stored in-memory and will reset when the server restarts.
 * IDs are auto-incremented for each new item.
+
