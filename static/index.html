@@ -1,97 +1,107 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Items App</title>
-  <style>
-    body { font-family: Arial; margin: 40px; }
-    input, button { margin: 5px; padding: 5px; }
-    .item { margin: 10px 0; }
-  </style>
+    <title>AIE300 App</title>
 </head>
+
 <body>
 
-  <h1>Items</h1>
+<h1>AIE300 Full Stack App</h1>
 
-  <!-- Create Item -->
-  <h3>Add Item</h3>
-  <input id="name" placeholder="Item name">
-  <button onclick="createItem()">Add</button>
+<input id="name" placeholder="Name">
+<input id="description" placeholder="Description">
 
-  <!-- Item List -->
-  <h3>List</h3>
-  <div id="items"></div>
+<button onclick="createItem()">Add Item</button>
+
+<ul id="items"></ul>
+
+<button onclick="predict()">Predict Iris Flower</button>
+
+<p id="prediction"></p>
 
 <script>
-const API_URL = "http://localhost:8000/items";
 
-// Load all items
 async function loadItems() {
-  const res = await fetch(API_URL);
-  const data = await res.json();
 
-  const container = document.getElementById("items");
-  container.innerHTML = "";
+    const response = await fetch('/items')
 
-  data.forEach(item => {
-    const div = document.createElement("div");
-    div.className = "item";
+    const items = await response.json()
 
-    div.innerHTML = `
-      <b>${item.name}</b>
-      <button onclick="deleteItem(${item.id})">Delete</button>
-      <button onclick="editItem(${item.id}, '${item.name}')">Edit</button>
-    `;
+    const list = document.getElementById('items')
 
-    container.appendChild(div);
-  });
+    list.innerHTML = ''
+
+    items.forEach(item => {
+
+        const li = document.createElement('li')
+
+        li.innerHTML = `
+            ${item.name} - ${item.description}
+            <button onclick="deleteItem(${item.id})">Delete</button>
+        `
+
+        list.appendChild(li)
+    })
 }
 
-// Create item
+
 async function createItem() {
-  const name = document.getElementById("name").value;
 
-  await fetch(API_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name })
-  });
+    const name = document.getElementById('name').value
+    const description = document.getElementById('description').value
 
-  document.getElementById("name").value = "";
-  loadItems();
+    await fetch('/items', {
+
+        method: 'POST',
+
+        headers: {
+            'Content-Type': 'application/json'
+        },
+
+        body: JSON.stringify({
+            name,
+            description
+        })
+    })
+
+    loadItems()
 }
 
-// Delete item
+
 async function deleteItem(id) {
-  await fetch(`${API_URL}/${id}`, {
-    method: "DELETE"
-  });
 
-  loadItems();
+    await fetch(`/items/${id}`, {
+        method: 'DELETE'
+    })
+
+    loadItems()
 }
 
-// Edit item
-async function editItem(id, oldName) {
-  const newName = prompt("Edit name:", oldName);
-  if (!newName) return;
 
-  await fetch(`${API_URL}/${id}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: newName })
-  });
+async function predict() {
 
-  loadItems();
+    const response = await fetch('/predict', {
+
+        method: 'POST',
+
+        headers: {
+            'Content-Type': 'application/json'
+        },
+
+        body: JSON.stringify({
+            features: [5.1, 3.5, 1.4, 0.2]
+        })
+    })
+
+    const result = await response.json()
+
+    document.getElementById('prediction').innerText =
+        `${result.prediction} (${result.confidence})`
 }
-fetch("/predict", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ features: [5.1, 3.5, 1.4, 0.2] })
-})
-.then(res => res.json())
-.then(data => console.log(data));
 
-// Initial load
-loadItems();
+
+loadItems()
+
 </script>
 
 </body>

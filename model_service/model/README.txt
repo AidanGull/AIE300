@@ -1,0 +1,1 @@
+Place your generated model.pth file in this folder after running train_model.py

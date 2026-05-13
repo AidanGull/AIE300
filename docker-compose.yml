@@ -1,7 +1,25 @@
 services:
-  web:
+
+  api:
     build: .
     ports:
       - "8000:8000"
+
     volumes:
       - ./data:/app/data
+
+    depends_on:
+      model-service:
+        condition: service_healthy
+
+  model-service:
+    build: ./model_service
+
+    ports:
+      - "8001:8001"
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3

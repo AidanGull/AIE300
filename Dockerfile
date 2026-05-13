@@ -5,10 +5,8 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy app + static + model explicitly
 COPY app /app/app
 COPY static /app/static
-COPY model.pth /app/model.pth
 
 ENV PYTHONPATH=/app
 
